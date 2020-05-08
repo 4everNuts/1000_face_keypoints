@@ -9,7 +9,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from radam import RAdam
 import torchvision.models as models
+import pretrainedmodels
 import tqdm
 from torch.nn import functional as fnn
 from torch.utils import data
@@ -18,7 +20,7 @@ from torchvision import transforms
 
 from hack_utils import NUM_PTS, CROP_SIZE
 from hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
-from hack_utils import ThousandLandmarksDataset
+from hack_utils import ThousandLandmarksDataset, FoldDatasetDataset
 from hack_utils import restore_landmarks_batch, create_submission
 
 torch.backends.cudnn.deterministic = True
@@ -33,6 +35,8 @@ def parse_arguments():
     parser.add_argument('--batch-size', '-b', default=512, type=int)  # 512 is OK for resnet18 finetune @ 6Gb of VRAM
     parser.add_argument('--epochs', '-e', default=1, type=int)
     parser.add_argument('--learning-rate', '-lr', default=1e-3, type=float)
+    parser.add_argument('--fold', '-f', type=int, help='choose from [0:5)')
+    parser.add_argument('--fold-prefix', '-fx', type=int)
     parser.add_argument('--gpu', action='store_true')
     parser.add_argument('--checkpoint', '-c', type=int)
     return parser.parse_args()
@@ -102,7 +106,16 @@ def predict(model, loader, device):
 def main(args):
     print(torch.cuda.device_count(), 'gpus available')
     # 0. Initializing training
-    if args.checkpoint is None:
+    if args.fold is not None:
+        if args.fold_prefix is None:
+            print('Please add fold-prefix to arguments')
+            return
+        folder_name = f'{args.name}_{args.fold_prefix // 10}{args.fold_prefix % 10}_fold{args.fold}'
+        checkpoint_path = os.path.join(args.data, 'checkpoints', folder_name)
+        log_path = os.path.join(args.data, 'logs', folder_name)
+        if not os.path.exists(checkpoint_path):
+            os.mkdir(checkpoint_path)
+    else:
         for i in range(100):
             folder_name = f'{args.name}_{i // 10}{i % 10}'
             checkpoint_path = os.path.join(args.data, 'checkpoints', folder_name)
@@ -110,52 +123,78 @@ def main(args):
             if not os.path.exists(checkpoint_path):
                 os.mkdir(checkpoint_path)
                 break
+    if args.checkpoint is None:
         training_state = {
             'best_checkpoints': [],
             'best_scores': [],
             'epoch': []
         }
     else:
-        folder_name = f'{args.name}_{args.checkpoint // 10}{args.checkpoint % 10}'
-        checkpoint_path = os.path.join(args.data, 'checkpoints', folder_name)
-        log_path = os.path.join(args.data, 'logs', folder_name)
-        training_state = torch.load(os.path.join(checkpoint_path, 'training_state.pth'))
+        from_checkpoint = f'{args.name}_{args.checkpoint // 10}{args.checkpoint % 10}'
+        parent_checkpoint_path = os.path.join(args.data, 'checkpoints', from_checkpoint)
+        training_state = torch.load(os.path.join(parent_checkpoint_path, 'training_state.pth'))
+        training_state['from_checkpoint'] = from_checkpoint
+        print(f'Using checkpoint {from_checkpoint}')
     print(f'Results can be found in {folder_name}')
     writer = SummaryWriter(log_dir=log_path)
 
     # 1. prepare data & models
+    if args.name == 'senet154':
+        crop_size = 224
+    else:
+        crop_size = CROP_SIZE
     train_transforms = transforms.Compose([
-        ScaleMinSideToSize((CROP_SIZE, CROP_SIZE)),
-        CropCenter(CROP_SIZE),
+        ScaleMinSideToSize((crop_size, crop_size)),
+        CropCenter(crop_size),
         TransformByKeys(transforms.ToPILImage(), ('image',)),
         TransformByKeys(transforms.ToTensor(), ('image',)),
-        TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ('image',)),
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
+        # TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ('image',)),
     ])
+
 
     print('Reading data...')
     datasets = torch.load(os.path.join(args.data, 'datasets.pth'))
-    train_dataset = datasets['train_dataset']
-    val_dataset = datasets['val_dataset']
+    for d in datasets:
+        datasets[d].transforms = train_transforms
+    if args.fold is None:
+        print('Using predefined data split')
+        train_dataset = datasets['train_dataset']
+        val_dataset = datasets['val_dataset']
+    else:
+        print(f'Using fold {args.fold}')
+        train_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
+                           split='train', fold=args.fold, seed=42)
+        val_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
+                           split='val', fold=args.fold, seed=42)
+
     test_dataset = datasets['test_dataset']
-    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
+    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                        shuffle=True, drop_last=True)
-    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
+    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                      shuffle=False, drop_last=False)
 
     print('Creating model...')
     device = torch.device('cuda: 0') if args.gpu else torch.device('cpu')
-    model = models.resnext50_32x4d(pretrained=True)
-    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
-    if torch.cuda.device_count() > 1:
-        print(f'Using {torch.cuda.device_count()} gpus')
-        model = nn.DataParallel(model)
+    if args.name == 'senet154':
+        model = pretrainedmodels.senet154(num_classes=1000, pretrained='imagenet')
+        model.last_linear = nn.Linear(model.last_linear.in_features, 2 * NUM_PTS, bias=True)
+    else:
+        model = models.resnext50_32x4d(pretrained=True)
+        model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
+    model = nn.DataParallel(model)
+    print(f'Using {torch.cuda.device_count()} gpus')
     if args.checkpoint is not None:
         model.load_state_dict(training_state['best_checkpoints'][0])
     model.to(device)
 
     # optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, nesterov=True)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    # optimizer = RAdam(model.parameters(), lr=args.learning_rate)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
+    # scheduler = None
+    print(f'Optimizer: {optimizer}')
+    print(f'Scheduler: {scheduler}')
     loss_fn = fnn.mse_loss
 
     # 2. train & validate
@@ -196,10 +235,12 @@ def main(args):
             best_val_loss = val_loss
             with open(os.path.join(checkpoint_path, f'{args.name}_best.pth'), 'wb') as fp:
                 torch.save(model.state_dict(), fp)
-
+    print('Training finished')
+    print(f'Min val loss = {training_state["best_scores"]} at epoch {training_state["epoch"]}')
+    print()
 
     # 3. predict
-    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
+    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                       shuffle=False, drop_last=False)
 
     with open(os.path.join(checkpoint_path, f'{args.name}_best.pth'), 'rb') as fp:
@@ -211,7 +252,7 @@ def main(args):
         pickle.dump({'image_names': test_dataset.image_names,
                      'landmarks': test_predictions}, fp)
 
-    create_submission(args.data, test_predictions, os.path.join(f'{args.name}_submit.csv'))
+    create_submission(args.data, test_predictions, os.path.join(checkpoint_path, f'{args.name}_submit.csv'))
 
 
 if __name__ == '__main__':

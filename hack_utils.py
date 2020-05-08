@@ -72,6 +72,42 @@ class TransformByKeys(object):
 
         return sample
 
+class FoldDatasetDataset(data.Dataset):
+    def __init__(self, train_dataset, val_dataset, transforms, split='train', fold=0, seed=42):
+        super(FoldDatasetDataset, self).__init__()
+        torch.manual_seed(seed)
+        image_names = train_dataset.image_names + val_dataset.image_names
+        image_names = np.array(image_names)
+        landmarks = torch.cat((train_dataset.landmarks, val_dataset.landmarks))
+        fold_indices = torch.randint(0, 5, (len(image_names),))
+        if split == 'train':
+            self.image_names = image_names[fold_indices != fold]
+            self.landmarks = landmarks[fold_indices != fold]
+        else:
+            self.image_names = image_names[fold_indices == fold]
+            self.landmarks = landmarks[fold_indices == fold]
+
+        self.transforms = transforms
+
+    def __getitem__(self, idx):
+        sample = {}
+        if self.landmarks is not None:
+            landmarks = self.landmarks[idx]
+            sample["landmarks"] = landmarks
+
+        image = cv2.imread(self.image_names[idx])
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        sample["image"] = image
+
+        if self.transforms is not None:
+            sample = self.transforms(sample)
+
+        return sample
+
+    def __len__(self):
+        return len(self.image_names)
+
+
 
 class ThousandLandmarksDataset(data.Dataset):
     def __init__(self, root, transforms, split="train"):
