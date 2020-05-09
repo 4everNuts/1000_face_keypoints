@@ -22,6 +22,7 @@ from hack_utils import NUM_PTS, CROP_SIZE
 from hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip
 from hack_utils import ThousandLandmarksDataset, FoldDatasetDataset
 from hack_utils import restore_landmarks_batch, create_submission
+import albumentations as albu
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -150,8 +151,23 @@ def main(args):
         TransformByKeys(transforms.ToPILImage(), ('image',)),
         TransformByKeys(transforms.ToTensor(), ('image',)),
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
-        # TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ('image',)),
     ])
+    test_transforms = transforms.Compose([
+        ScaleMinSideToSize((crop_size, crop_size)),
+        CropCenter(crop_size),
+        TransformByKeys(transforms.ToPILImage(), ('image',)),
+        TransformByKeys(transforms.ToTensor(), ('image',)),
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
+    ])
+    albu_transforms = albu.Compose([
+                        albu.ShiftScaleRotate(scale_limit=0.05, rotate_limit=10, p=0.5, border_mode=0),
+                        albu.RandomRain(p=0.05),
+                        albu.RandomFog(p=0.05),
+                        albu.Blur(p=0.1),
+                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
+                        albu.ChannelShuffle(p=0.1),
+                       ],
+                      keypoint_params=albu.KeypointParams(format='xy'))
 
     print('Reading data...')
     datasets = torch.load(os.path.join(args.data, 'datasets.pth'))
@@ -164,11 +180,12 @@ def main(args):
     else:
         print(f'Using fold {args.fold}')
         train_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
-                           split='train', fold=args.fold, seed=42)
+                           albu_transforms, split='train', fold=args.fold, seed=42)
         val_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
-                           split='val', fold=args.fold, seed=42)
+                           albu_transforms, split='val', fold=args.fold, seed=42)
 
     test_dataset = datasets['test_dataset']
+    test_dataset.transforms = test_transforms
     train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                        shuffle=True, drop_last=True)
     val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,

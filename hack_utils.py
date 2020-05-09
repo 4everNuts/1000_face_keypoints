@@ -100,7 +100,7 @@ class TransformByKeys(object):
 
 
 class FoldDatasetDataset(data.Dataset):
-    def __init__(self, train_dataset, val_dataset, transforms, split='train', fold=0, seed=42):
+    def __init__(self, train_dataset, val_dataset, transforms, albu_transorms=None, split='train', fold=0, seed=42):
         super(FoldDatasetDataset, self).__init__()
         torch.manual_seed(seed)
         image_names = train_dataset.image_names + val_dataset.image_names
@@ -114,17 +114,28 @@ class FoldDatasetDataset(data.Dataset):
             self.image_names = image_names[fold_indices == fold]
             self.landmarks = landmarks[fold_indices == fold]
 
+        self.albu_transforms = albu_transorms
         self.transforms = transforms
 
     def __getitem__(self, idx):
         sample = {}
         if self.landmarks is not None:
             landmarks = self.landmarks[idx]
-            sample["landmarks"] = landmarks
+            sample['landmarks'] = landmarks
 
         image = cv2.imread(self.image_names[idx])
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        sample["image"] = image
+        sample['image'] = image
+
+        if self.albu_transforms is not None:
+            sample['keypoints'] = []
+            try:
+                sample = self.albu_transforms(image=image, keypoints=landmarks)
+                assert len(sample['keypoints']) == NUM_PTS
+                sample['landmarks'] = torch.tensor(np.stack(sample.pop('keypoints')))
+            except:
+                sample.pop('keypoints')
+                sample['landmarks'] = landmarks
 
         if self.transforms is not None:
             sample = self.transforms(sample)
