@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 
 from hack_utils import NUM_PTS, CROP_SIZE
-from hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys
+from hack_utils import ScaleMinSideToSize, CropCenter, TransformByKeys, HorizontalFlip
 from hack_utils import ThousandLandmarksDataset, FoldDatasetDataset
 from hack_utils import restore_landmarks_batch, create_submission
 
@@ -144,6 +144,7 @@ def main(args):
     else:
         crop_size = CROP_SIZE
     train_transforms = transforms.Compose([
+        HorizontalFlip(p=0.5),
         ScaleMinSideToSize((crop_size, crop_size)),
         CropCenter(crop_size),
         TransformByKeys(transforms.ToPILImage(), ('image',)),
@@ -151,7 +152,6 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
         # TransformByKeys(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), ('image',)),
     ])
-
 
     print('Reading data...')
     datasets = torch.load(os.path.join(args.data, 'datasets.pth'))

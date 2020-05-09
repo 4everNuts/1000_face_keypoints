@@ -15,6 +15,32 @@ CROP_SIZE = 128
 SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X,Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X,Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X,Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X,Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X,Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X,Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X,Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n"
 
 
+class HorizontalFlip(object):
+    def __init__(self, p=0.5, elem_name='image'):
+        self.elem_name = elem_name
+        self.p = p
+
+    def __call__(self, sample):
+        if torch.rand(1).item() < self.p and 'landmarks' in sample:
+            sample[self.elem_name] = sample[self.elem_name][:, ::-1]
+            # switching keypoint order
+            sample['landmarks'][0:128] = sample['landmarks'][np.r_[64:128, 0:64]]
+            sample['landmarks'][128:273] = sample['landmarks'][np.r_[272:127:-1]]
+            sample['landmarks'][273:401] = sample['landmarks'][np.r_[337:401, 273:337]]
+            sample['landmarks'][401:527] = sample['landmarks'][np.r_[464:527, 401:464]]
+            sample['landmarks'][527:587] = sample['landmarks'][np.r_[586:526:-1]]
+            sample['landmarks'][587:841] = sample['landmarks'][np.r_[714:841, 587:714]]
+            sample['landmarks'][841:873] = sample['landmarks'][np.r_[872:840:-1]]
+            sample['landmarks'][873:905] = sample['landmarks'][np.r_[904:872:-1]]
+            sample['landmarks'][905:937] = sample['landmarks'][np.r_[936:904:-1]]
+            sample['landmarks'][937:969] = sample['landmarks'][np.r_[968:936:-1]]
+            sample['landmarks'][969:971] = sample['landmarks'][np.r_[970:968:-1]]
+            # updating keypoints
+            width = sample[self.elem_name].shape[1]
+            sample['landmarks'][:, 0] = width - 1 - sample['landmarks'][:, 0]
+        return sample
+
+
 class ScaleMinSideToSize(object):
     def __init__(self, size=(CROP_SIZE, CROP_SIZE), elem_name='image'):
         self.size = torch.tensor(size, dtype=torch.float)
@@ -72,6 +98,7 @@ class TransformByKeys(object):
 
         return sample
 
+
 class FoldDatasetDataset(data.Dataset):
     def __init__(self, train_dataset, val_dataset, transforms, split='train', fold=0, seed=42):
         super(FoldDatasetDataset, self).__init__()
@@ -106,7 +133,6 @@ class FoldDatasetDataset(data.Dataset):
 
     def __len__(self):
         return len(self.image_names)
-
 
 
 class ThousandLandmarksDataset(data.Dataset):
