@@ -160,9 +160,10 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
     ])
     albu_transforms = albu.Compose([
-                        # albu.Rotate(limit=15, p=0.05, border_mode=0),
+                        albu.Blur(p=0.1),
+                        albu.MultiplicativeNoise(p=0.1, per_channel=True),
                         albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
-                        albu.ChannelShuffle(p=0.2),
+                        albu.ChannelShuffle(p=0.2)
                        ],
                       keypoint_params=albu.KeypointParams(format='xy'))
     print('\nTransforms:')
@@ -206,9 +207,9 @@ def main(args):
     # for i in tqdm.tqdm(range(1024+118, 1024+512)):
     #     train_dataset[i]
 
-    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
+    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
                                        shuffle=True, drop_last=True)
-    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
+    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
                                      shuffle=False, drop_last=False)
 
     print('Creating model...')
@@ -277,7 +278,7 @@ def main(args):
     print()
 
     # 3. predict
-    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
+    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                       shuffle=False, drop_last=False)
 
     with open(os.path.join(checkpoint_path, f'{args.name}_best.pth'), 'rb') as fp:
