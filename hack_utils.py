@@ -131,20 +131,32 @@ class FoldDatasetDataset(data.Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         sample['image'] = image
 
+        # if self.albu_transforms is not None:
+        #     sample['keypoints'] = []
+        #
+        #     # checking dims
+        #     if self.min_xy[idx] < 0 or self.max_x[idx] >= image.shape[1] or self.max_y[idx] >= image.shape[0]:
+        #         sample.pop('keypoints')
+        #         sample['landmarks'] = landmarks
+        #     else:
+        #         sample = self.albu_transforms(image=image, keypoints=landmarks)
+        #         if len(sample['keypoints']) == NUM_PTS:
+        #             sample['landmarks'] = torch.tensor(np.stack(sample.pop('keypoints')))
+        #         else:
+        #             sample.pop('keypoints')
+        #             sample['landmarks'] = landmarks
+        # else:
+        #     sample['landmarks'] = landmarks
+
         if self.albu_transforms is not None:
             sample['keypoints'] = []
-
-            # checking dims
-            if self.min_xy[idx] < 0 or self.max_x[idx] >= image.shape[1] or self.max_y[idx] >= image.shape[0]:
+            try:
+                sample = self.albu_transforms(image=image, keypoints=landmarks)
+                assert len(sample['keypoints']) == NUM_PTS
+                sample['landmarks'] = torch.tensor(np.stack(sample.pop('keypoints')))
+            except:
                 sample.pop('keypoints')
                 sample['landmarks'] = landmarks
-            else:
-                sample = self.albu_transforms(image=image, keypoints=landmarks)
-                if len(sample['keypoints']) == NUM_PTS:
-                    sample['landmarks'] = torch.tensor(np.stack(sample.pop('keypoints')))
-                else:
-                    sample.pop('keypoints')
-                    sample['landmarks'] = landmarks
         else:
             sample['landmarks'] = landmarks
 

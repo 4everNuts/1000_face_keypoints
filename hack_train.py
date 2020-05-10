@@ -160,17 +160,16 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
     ])
     albu_transforms = albu.Compose([
-                        albu.ShiftScaleRotate(scale_limit=0.10, rotate_limit=15, p=0.3, border_mode=0),
-                        albu.RandomRain(p=0.10),
-                        albu.RandomFog(p=0.10),
-                        albu.Blur(p=0.1),
-                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.1),
-                        albu.ChannelShuffle(p=0.1),
+                        # albu.Rotate(limit=15, p=0.05, border_mode=0),
+                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
+                        albu.ChannelShuffle(p=0.2),
                        ],
                       keypoint_params=albu.KeypointParams(format='xy'))
+    print('\nTransforms:')
     print(albu_transforms)
+    print(train_transforms)
 
-    print('Reading data...')
+    print('\nReading data...')
     datasets = torch.load(os.path.join(args.data, 'datasets.pth'))
     for d in datasets:
         datasets[d].transforms = train_transforms
@@ -187,6 +186,20 @@ def main(args):
 
     test_dataset = datasets['test_dataset']
     test_dataset.transforms = test_transforms
+
+    # time_total = []
+    # time_shift_scale = []
+    # for i in tqdm.tqdm(range(1024 + 118, 1024 + 512)):
+    #     sample, t_total, t_shift = train_dataset[i]
+    #     time_total.append(t_total)
+    #     time_shift_scale.append(t_shift)
+    # time_total = np.array(time_total)
+    # time_shift_scale = np.array([i for i in time_shift_scale if i is not None])
+    # print(f'Total {len(time_total)} points')
+    # print(f'Albu: {len(time_shift_scale)} points')
+    # print(f'mean total time = {np.mean(time_total)}, mean shift time = {np.mean(time_shift_scale)}')
+    # print(f'Albu ratio = {np.mean(time_shift_scale)/np.mean(time_total)}')
+    # return
 
     # train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
     #                                    shuffle=False, drop_last=True)
