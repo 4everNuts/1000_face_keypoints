@@ -145,7 +145,7 @@ def main(args):
     else:
         crop_size = CROP_SIZE
     train_transforms = transforms.Compose([
-        HorizontalFlip(p=0.5),
+        # HorizontalFlip(p=0.5),
         ScaleMinSideToSize((crop_size, crop_size)),
         CropCenter(crop_size),
         TransformByKeys(transforms.ToPILImage(), ('image',)),
@@ -160,14 +160,15 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
     ])
     albu_transforms = albu.Compose([
-                        albu.ShiftScaleRotate(scale_limit=0.05, rotate_limit=10, p=0.5, border_mode=0),
-                        albu.RandomRain(p=0.05),
-                        albu.RandomFog(p=0.05),
+                        albu.ShiftScaleRotate(scale_limit=0.10, rotate_limit=15, p=0.3, border_mode=0),
+                        albu.RandomRain(p=0.10),
+                        albu.RandomFog(p=0.10),
                         albu.Blur(p=0.1),
-                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
+                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.1),
                         albu.ChannelShuffle(p=0.1),
                        ],
                       keypoint_params=albu.KeypointParams(format='xy'))
+    print(albu_transforms)
 
     print('Reading data...')
     datasets = torch.load(os.path.join(args.data, 'datasets.pth'))
@@ -182,10 +183,21 @@ def main(args):
         train_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
                            albu_transforms, split='train', fold=args.fold, seed=42)
         val_dataset = FoldDatasetDataset(datasets['train_dataset'], datasets['val_dataset'], train_transforms,
-                           albu_transforms, split='val', fold=args.fold, seed=42)
+                           None, split='val', fold=args.fold, seed=42)
 
     test_dataset = datasets['test_dataset']
     test_dataset.transforms = test_transforms
+
+    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
+                                       shuffle=False, drop_last=True)
+    for i, batch in tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc='finding kosyak'):
+        pass
+
+
+
+
+
+
     train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
                                        shuffle=True, drop_last=True)
     val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
