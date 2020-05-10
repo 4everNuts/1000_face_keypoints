@@ -116,8 +116,8 @@ class FoldDatasetDataset(data.Dataset):
 
         # the following data will be needed for albu augmentations
         self.min_xy = torch.min(torch.min(self.landmarks[:, :], dim=1).values, dim=1).values
-        self.max_x = torch.min(self.landmarks[:, :, 0], dim=1).values
-        self.max_y = torch.min(self.landmarks[:, :, 1], dim=1).values
+        self.max_x = torch.max(self.landmarks[:, :, 0], dim=1).values
+        self.max_y = torch.max(self.landmarks[:, :, 1], dim=1).values
 
         self.albu_transforms = albu_transorms
         self.transforms = transforms
@@ -145,6 +145,8 @@ class FoldDatasetDataset(data.Dataset):
                 else:
                     sample.pop('keypoints')
                     sample['landmarks'] = landmarks
+        else:
+            sample['landmarks'] = landmarks
 
         if self.transforms is not None:
             sample = self.transforms(sample)

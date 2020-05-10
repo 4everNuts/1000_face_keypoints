@@ -188,19 +188,14 @@ def main(args):
     test_dataset = datasets['test_dataset']
     test_dataset.transforms = test_transforms
 
-    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
-                                       shuffle=False, drop_last=True)
-    for i, batch in tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader), desc='finding kosyak'):
-        pass
+    # train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
+    #                                    shuffle=False, drop_last=True)
+    # for i in tqdm.tqdm(range(1024+118, 1024+512)):
+    #     train_dataset[i]
 
-
-
-
-
-
-    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
+    train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
                                        shuffle=True, drop_last=True)
-    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
+    val_dataloader = data.DataLoader(val_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
                                      shuffle=False, drop_last=False)
 
     print('Creating model...')
@@ -269,7 +264,7 @@ def main(args):
     print()
 
     # 3. predict
-    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=16, pin_memory=True,
+    test_dataloader = data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
                                       shuffle=False, drop_last=False)
 
     with open(os.path.join(checkpoint_path, f'{args.name}_best.pth'), 'rb') as fp:
