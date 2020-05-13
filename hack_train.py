@@ -131,6 +131,7 @@ def main(args):
             'epoch': []
         }
     else:
+        # loading checkpoint
         from_checkpoint = f'{args.name}_{args.checkpoint // 10}{args.checkpoint % 10}'
         parent_checkpoint_path = os.path.join(args.data, 'checkpoints', from_checkpoint)
         training_state = torch.load(os.path.join(parent_checkpoint_path, 'training_state.pth'))
@@ -160,10 +161,10 @@ def main(args):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ('image',)),
     ])
     albu_transforms = albu.Compose([
-                        albu.Blur(p=0.1),
-                        albu.MultiplicativeNoise(p=0.1, per_channel=True),
-                        albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
-                        albu.ChannelShuffle(p=0.2)
+                            albu.Blur(p=0.1),
+                            albu.MultiplicativeNoise(p=0.1, per_channel=True),
+                            albu.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20, val_shift_limit=20, p=0.2),
+                            albu.ChannelShuffle(p=0.2)
                        ],
                       keypoint_params=albu.KeypointParams(format='xy'))
     print('\nTransforms:')
@@ -187,25 +188,6 @@ def main(args):
 
     test_dataset = datasets['test_dataset']
     test_dataset.transforms = test_transforms
-
-    # time_total = []
-    # time_shift_scale = []
-    # for i in tqdm.tqdm(range(1024 + 118, 1024 + 512)):
-    #     sample, t_total, t_shift = train_dataset[i]
-    #     time_total.append(t_total)
-    #     time_shift_scale.append(t_shift)
-    # time_total = np.array(time_total)
-    # time_shift_scale = np.array([i for i in time_shift_scale if i is not None])
-    # print(f'Total {len(time_total)} points')
-    # print(f'Albu: {len(time_shift_scale)} points')
-    # print(f'mean total time = {np.mean(time_total)}, mean shift time = {np.mean(time_shift_scale)}')
-    # print(f'Albu ratio = {np.mean(time_shift_scale)/np.mean(time_total)}')
-    # return
-
-    # train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=4, pin_memory=True,
-    #                                    shuffle=False, drop_last=True)
-    # for i in tqdm.tqdm(range(1024+118, 1024+512)):
-    #     train_dataset[i]
 
     train_dataloader = data.DataLoader(train_dataset, batch_size=args.batch_size, num_workers=32, pin_memory=True,
                                        shuffle=True, drop_last=True)
